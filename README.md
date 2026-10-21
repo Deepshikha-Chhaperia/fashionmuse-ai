@@ -56,6 +56,7 @@ Node.js 18+ and npm.
    # Server-side only, never exposed to the browser
    VERTEX_API_KEY=your_vertex_express_api_key_here
    IMAGE_MODEL=gemini-2.5-flash-image
+   VERTEX_LOCATION=us-central1
    ```
 
 3. Run the development server:
@@ -72,7 +73,7 @@ Node.js 18+ and npm.
 
 ### Deployment
 
-Deploy directly to Vercel. Ensure `VERTEX_API_KEY` and optional `IMAGE_MODEL` are configured in your **Vercel Project Settings > Environment Variables**.
+Deploy directly to Vercel. Ensure `VERTEX_API_KEY` and optional `IMAGE_MODEL` and `VERTEX_LOCATION` are configured in your **Vercel Project Settings > Environment Variables**.
 
 ## What I Built
 

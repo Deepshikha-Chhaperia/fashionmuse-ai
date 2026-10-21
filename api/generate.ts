@@ -50,17 +50,23 @@ const sendResponse = (res: any, status: number, data: any) => {
 export default async function handler(req: any, res: any) {
   const start = Date.now();
   const model = process.env.IMAGE_MODEL || 'gemini-2.5-flash-image';
+  const location = process.env.VERTEX_LOCATION || 'us-central1';
+  const baseUrl = location === 'global'
+    ? 'https://aiplatform.googleapis.com'
+    : `https://${location}-aiplatform.googleapis.com`;
+
+  console.log(`[REQUEST /api/generate] model=${model} location=${location} endpoint=${baseUrl}`);
 
   try {
     if (req.method !== 'POST') {
-      logDebug({ model, startTime: new Date(start).toISOString(), endTime: new Date().toISOString(), duration: `${Date.now() - start}ms`, status: 405 });
+      logDebug({ model, location, startTime: new Date(start).toISOString(), endTime: new Date().toISOString(), duration: `${Date.now() - start}ms`, status: 405 });
       return sendResponse(res, 405, { error: "Couldn't generate the design. Please try again." });
     }
 
     const apiKey = process.env.VERTEX_API_KEY;
     if (!apiKey) {
       console.error('[SERVER ERROR] VERTEX_API_KEY is not configured in environment variables');
-      logDebug({ model, startTime: new Date(start).toISOString(), endTime: new Date().toISOString(), duration: `${Date.now() - start}ms`, status: 500, error: { name: 'ConfigError', message: 'VERTEX_API_KEY missing' } });
+      logDebug({ model, location, startTime: new Date(start).toISOString(), endTime: new Date().toISOString(), duration: `${Date.now() - start}ms`, status: 500, error: { name: 'ConfigError', message: 'VERTEX_API_KEY missing' } });
       return sendResponse(res, 500, { error: "Couldn't generate the design. Please try again." });
     }
 
@@ -88,12 +94,18 @@ export default async function handler(req: any, res: any) {
     if (systemInstruction) config.systemInstruction = systemInstruction;
     if (!config.responseModalities) config.responseModalities = ['IMAGE'];
 
-    const ai = new GoogleGenAI({ vertexai: true, apiKey });
+    const ai = new GoogleGenAI({
+      vertexai: true,
+      apiKey,
+      location,
+      httpOptions: { baseUrl },
+    });
     const result = await ai.models.generateContent({ model, contents, config });
 
     const end = Date.now();
     logDebug({
       model,
+      location,
       startTime: new Date(start).toISOString(),
       endTime: new Date(end).toISOString(),
       duration: `${end - start}ms`,
@@ -109,6 +121,7 @@ export default async function handler(req: any, res: any) {
     console.error(`[SERVER ERROR] /api/generate failed (${safeStatus}):`, err.name || 'Error', err.message || String(err));
     logDebug({
       model,
+      location,
       startTime: new Date(start).toISOString(),
       endTime: new Date(end).toISOString(),
       duration: `${end - start}ms`,
