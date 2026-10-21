@@ -1,0 +1,152 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Haute Couture Alabaster & Warm Obsidian Palette */
+    --background: 36 22% 97.5%;
+    --foreground: 24 10% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 24 10% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 24 10% 12%;
+
+    --primary: 38 36% 44%;
+    --primary-foreground: 36 22% 98%;
+
+    --secondary: 36 16% 93%;
+    --secondary-foreground: 24 10% 14%;
+
+    --muted: 36 14% 92%;
+    --muted-foreground: 24 8% 34%;
+
+    --accent: 38 36% 44%;
+    --accent-foreground: 24 10% 12%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 36 12% 88%;
+    --input: 36 12% 88%;
+    --ring: 38 36% 44%;
+
+    --radius: 0.2rem;
+
+    /* Bespoke Couture Fashion Tokens */
+    --gold: 38 36% 44%;
+    --gold-light: 38 35% 68%;
+    --gold-dark: 38 38% 32%;
+    --ivory: 36 22% 97.5%;
+    --ivory-warm: 36 25% 95%;
+    --charcoal: 24 10% 12%;
+    --charcoal-light: 24 8% 28%;
+
+    /* Typography */
+    --font-display: 'Playfair Display', serif;
+    --font-body: 'Inter', sans-serif;
+
+    /* Shadows */
+    --shadow-soft: 0 2px 14px -2px hsl(24 20% 15% / 0.05);
+    --shadow-elevated: 0 10px 30px -6px hsl(24 20% 15% / 0.08);
+    --shadow-gold: 0 6px 24px -4px hsl(38 36% 44% / 0.2);
+
+    --sidebar-background: 0 0% 99%;
+    --sidebar-foreground: 24 10% 20%;
+    --sidebar-primary: 24 10% 12%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 36 15% 94%;
+    --sidebar-accent-foreground: 24 10% 12%;
+    --sidebar-border: 36 12% 90%;
+    --sidebar-ring: 38 36% 44%;
+  }
+
+  .dark {
+    --background: 24 12% 8%;
+    --foreground: 36 20% 95%;
+
+    --card: 24 10% 11%;
+    --card-foreground: 36 20% 95%;
+
+    --popover: 24 10% 11%;
+    --popover-foreground: 36 20% 95%;
+
+    --primary: 38 40% 55%;
+    --primary-foreground: 24 12% 8%;
+
+    --secondary: 24 8% 16%;
+    --secondary-foreground: 36 18% 90%;
+
+    --muted: 24 8% 18%;
+    --muted-foreground: 36 10% 64%;
+
+    --accent: 38 40% 55%;
+    --accent-foreground: 24 12% 8%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 24 8% 18%;
+    --input: 24 8% 18%;
+    --ring: 38 40% 55%;
+
+    --gold: 38 40% 55%;
+    --gold-light: 38 42% 70%;
+    --charcoal: 36 20% 95%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+    font-feature-settings: "kern" 1, "liga" 1;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-tight text-foreground;
+  }
+
+  ::selection {
+    background: hsl(var(--gold) / 0.2);
+  }
+}
+
+@layer components {
+  .text-gradient-gold {
+    @apply bg-gradient-to-r from-[hsl(var(--gold-dark))] via-[hsl(var(--gold))] to-[hsl(var(--gold-light))] bg-clip-text text-transparent;
+  }
+
+  .glass-card {
+    @apply bg-card/90 backdrop-blur-md border border-border;
+  }
+
+  .hover-lift {
+    @apply transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-elevated;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-body {
+    font-family: var(--font-body);
+  }
+
+  .leading-editorial {
+    line-height: 1.75;
+  }
+}
