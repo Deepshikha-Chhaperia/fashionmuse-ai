@@ -1,17 +1,15 @@
 import { PROMPTS, type GenerationMode } from './prompts';
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-
 export interface GenerationOptions {
   mode: GenerationMode;
   images: string[];
-  customInstructions?: string;
-  numImages?: number; // 1 or 2
-  marketStyle?: string;
+  numImages?: 1 | 2 | 3 | 4 | 5;
+  application?: 'garment' | 'furnishing';
+  targetBuyers?: string;
   complexityLevel?: 'simple' | 'moderate' | 'intricate' | 'ultra-complex';
-  includeComplexity?: boolean;
   materialCount?: number;
-  patternType?: 'all-over' | 'half-drop' | 'diamond-lattice' | 'directional-flow';
+  patternType?: 'all-over' | 'half-drop' | 'diamond-lattice' | 'directional-flow' | 'border-trim';
+  customInstructions?: string;
   onDesignGenerated?: (design: GeneratedDesign) => void;
 }
 
@@ -21,7 +19,6 @@ export interface GeneratedDesign {
   title: string;
   timestamp: string;
   mode: GenerationMode;
-  cost: number;
 }
 
 const COMPLEXITY_MAP: Record<string, string> = {
@@ -38,28 +35,65 @@ const PATTERN_MAP: Record<string, string> = {
   'directional-flow': 'Repeat Structure: Directional one-way repeat maintaining continuous flow.',
 };
 
+const TARGET_BUYERS_MAP: Record<string, string> = {
+  europe: 'Europe: muted tonal palette, clean composition, restrained density.',
+  us: 'United States: bold high-sparkle statement look, strong contrast.',
+  'middle-east': 'Middle East: rich gold tones, dense opulent coverage, bridal-ready.',
+};
+
 const MODE_LABELS: Record<GenerationMode, string> = {
   variations: 'Variation',
   'new-ip': 'Original Concept',
   material: 'Material Design',
-  custom: 'Custom Concept',
-  'dress-reference': 'Couture Motif',
   'statement-piece': 'Statement Piece',
-  'by-the-meter': 'By-the-Meter Pattern',
-  'border-trim': 'Border & Trim',
+  pattern: 'Pattern',
 };
 
+const compressImage = (dataUrl: string): Promise<string> =>
+  new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const max = 1024;
+      let { width: w, height: h } = img;
+      if (w > max || h > max) {
+        if (w > h) { h = Math.round((h * max) / w); w = max; }
+        else { w = Math.round((w * max) / h); h = max; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d')?.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+
 const buildPrompt = (mode: GenerationMode, opts: GenerationOptions) => {
-  let prompt = PROMPTS[mode]
-    .replace('{{MARKET_STYLE}}', opts.marketStyle?.trim() || 'Ultra-luxury couture')
-    .replace('{{COLOR_CODES}}', 'Harmonious couture palette selected for maximum luxury and depth')
-    .replace('{{COMPLEXITY_LEVEL}}', opts.complexityLevel ? opts.complexityLevel.charAt(0).toUpperCase() + opts.complexityLevel.slice(1) : 'Intricate')
-    .replace('{{MATERIAL_COUNT}}', opts.materialCount ? String(opts.materialCount) : '6');
+  const baseFabric = opts.application === 'furnishing'
+    ? 'heavy linen furnishing fabric, motif scaled for a cushion cover or curtain panel'
+    : 'silk organza garment fabric';
+
+  let prompt = PROMPTS[mode].replace('{{BASE_FABRIC}}', baseFabric);
+
+  if (mode === 'statement-piece') {
+    prompt = prompt.replace('{{MATERIAL_COUNT}}', opts.materialCount ? String(opts.materialCount) : '6');
+  }
+
+  if (mode === 'pattern') {
+    const isBorder = opts.patternType === 'border-trim';
+    const patternBlock = isBorder
+      ? 'Design one continuous hand-embroidery border, 3-8 cm wide, for necklines, cuffs, hemlines, dupatta and veil edges. Show at least 3 repeats in a row so the connection between repeats is clearly visible. Even rhythm, delicate small-scale materials, works on straight and gently curved edges.'
+      : 'Design one seamless repeating hand-embroidery pattern for fabric sold by the meter. The pattern must tile perfectly in both directions. Show a 2x2 tile so the repeat is clearly visible. Each repeat unit: 3-8 small motifs, 30-50% empty fabric, even density so craftsmen can produce it at scale.';
+    prompt = prompt.replace('{{PATTERN_BLOCK}}', patternBlock);
+  }
+
+  const buyerText = opts.targetBuyers ? (TARGET_BUYERS_MAP[opts.targetBuyers] || opts.targetBuyers) : TARGET_BUYERS_MAP.europe;
 
   const notes = [
-    opts.complexityLevel && opts.includeComplexity !== false ? COMPLEXITY_MAP[opts.complexityLevel] : '',
-    mode === 'statement-piece' && opts.materialCount ? `Material Selection: Focus on ${opts.materialCount} harmonious materials.` : '',
-    mode === 'by-the-meter' && opts.patternType ? PATTERN_MAP[opts.patternType] : '',
+    mode === 'pattern' && opts.patternType && opts.patternType !== 'border-trim' ? PATTERN_MAP[opts.patternType] : '',
+    COMPLEXITY_MAP[opts.complexityLevel || 'intricate'],
+    `Target buyers: ${buyerText}`,
     opts.customInstructions?.trim() ? `Client Specifications: ${opts.customInstructions.trim()}` : '',
   ].filter(Boolean);
 
@@ -68,23 +102,19 @@ const buildPrompt = (mode: GenerationMode, opts: GenerationOptions) => {
 
 export async function generateDesigns(
   options: GenerationOptions
-): Promise<{ designs: GeneratedDesign[]; totalCost: number; provider: string }> {
-  if (!GEMINI_API_KEY) {
-    throw new Error('Gemini API key not configured. Please add VITE_GEMINI_API_KEY to your .env file.');
-  }
-
+): Promise<{ designs: GeneratedDesign[] }> {
   const { mode, images, numImages = 2, onDesignGenerated } = options;
   const prompt = buildPrompt(mode, options);
-  const limitedImages = images.slice(0, 3);
+  const compressedImages = await Promise.all(images.slice(0, 10).map(compressImage));
   const designs: GeneratedDesign[] = [];
 
   for (let i = 0; i < numImages; i++) {
     const requestBody = {
       contents: [{
         parts: [
-          ...limitedImages.map((img) => ({
+          ...compressedImages.map((img) => ({
             inline_data: {
-              mime_type: img.split(';')[0].replace('data:', '') || 'image/jpeg',
+              mime_type: 'image/jpeg',
               data: img.split(',')[1],
             },
           })),
@@ -92,34 +122,34 @@ export async function generateDesigns(
         ],
       }],
       generationConfig: {
-        temperature: 0.9,
+        temperature: 0.7,
         topK: 40,
         topP: 0.95,
         responseModalities: ['IMAGE'],
       },
     };
 
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${GEMINI_API_KEY}`,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(requestBody) }
-    );
+    const res = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
 
     if (!res.ok) {
       const errText = await res.text().catch(() => res.statusText);
-      throw new Error(`Gemini API error (${res.status}): ${errText}`);
+      throw new Error(`API error (${res.status}): ${errText}`);
     }
 
     const data = await res.json();
     const b64 = data.candidates?.[0]?.content?.parts?.find((part: any) => part.inlineData)?.inlineData?.data;
-    if (!b64) throw new Error(`Gemini response did not contain image data for design ${i + 1}`);
+    if (!b64) throw new Error(`Response did not contain image data for design ${i + 1}`);
 
     const design: GeneratedDesign = {
-      id: `gemini-${Date.now()}-${i}`,
+      id: `design-${Date.now()}-${i}`,
       image: `data:image/png;base64,${b64}`,
       title: `${MODE_LABELS[mode]} ${i + 1}`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       mode,
-      cost: 0.03,
     };
 
     designs.push(design);
@@ -128,7 +158,5 @@ export async function generateDesigns(
     if (i < numImages - 1) await new Promise((resolve) => setTimeout(resolve, 1500));
   }
 
-  return { designs, totalCost: designs.reduce((sum, d) => sum + d.cost, 0), provider: 'Gemini Pro' };
+  return { designs };
 }
-
-export const isGeminiConfigured = () => Boolean(GEMINI_API_KEY && GEMINI_API_KEY !== '');

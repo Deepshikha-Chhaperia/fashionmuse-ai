@@ -1,73 +1,81 @@
-# Welcome to your Lovable project
+# Atelier — AI Embroidery Design Generator
 
-## Project info
+> Production-ready AI embroidery design generator for hand-embroidery and couture motif design with Gemini.
 
-**URL**: https://lovable.dev/projects/dc4da196-a024-4696-8bec-e6040ad848b6
+An editorial design studio for fashion designers and textile ateliers to conceptualize, iterate, and generate photorealistic, hand-stitchable embroidery motifs from references and raw materials.
 
-## How can I edit this code?
+## What It Does
 
-There are several ways of editing your application.
+- **Upload Reference Motifs & Materials**: Drag and drop up to 10 inspiration images or material photos (beads, sequins, crystals, threads) with automatic client-side compression.
+- **5 Couture Generation Modes**: Generate original embroidery compositions tailored to specific garment placements, statement centerpieces, material inventories, or repeating yardage.
+- **Precision Craftsmanship Controls**: Adjust design complexity from minimal restraint to museum-grade density, and target specific regional markets (Europe, US, Middle East, or custom).
+- **Substrate Context**: Select intended application (Garment on silk organza vs. Home furnishing on heavy linen) to adapt scale and background texture.
+- **Real-Time Streaming & Export**: Watch motifs stream onto the screen as they generate (1–5 iterations), preview in full-screen modal, and download individual assets or a combined ZIP archive.
 
-**Use Lovable**
+## Features
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/dc4da196-a024-4696-8bec-e6040ad848b6) and start prompting.
+- **Variations from Reference**: Creates new hand-embroidery compositions preserving the density, flow, and material family of uploaded inspiration without replicating existing shapes.
+- **New Original Design**: Invents fresh, abstract architectural silhouettes with three-dimensional relief, free of decorative clichés or known fashion house motifs.
+- **Design from Materials**: Formulates production-feasible motifs using only uploaded raw material photos (beads, crystals, sequins, threads) with realistic weight distribution.
+- **Statement Piece**: Engineers high-impact centerpiece designs (25–40 cm) with focal points, radiating geometry, and 3–5 layers of depth for gowns, jackets, or bridal wear.
+- **Repeat / Border Pattern**: Generates continuous edging borders (3–8 cm) for necklines and cuffs, or seamless 2x2 repeating yardage patterns with structured repeat logic.
+- **Target Buyers Profiling**: Fine-tunes aesthetic direction for regional markets (Europe: muted tonal palette; US: high-sparkle contrast; Middle East: rich gold tones, dense coverage; Custom text).
+- **Generation Batching**: Generates between 1 to 5 variations per batch with progressive real-time rendering.
+- **Bulk & Single Export**: Single-click image downloads or bulk packaging into timestamped `.zip` archives via JSZip.
 
-Changes made via Lovable will be committed automatically to this repo.
+## Tech Stack
 
-**Use your preferred IDE**
+- **Frontend**: React 18, TypeScript, Vite
+- **Styling & UI**: Tailwind CSS, shadcn/ui (Radix UI primitives), Lucide React
+- **Client Processing**: HTML5 Canvas (client-side image downscaling to 1024px @ 0.85 JPEG)
+- **Exporting**: JSZip
+- **AI & Backend**: Google Gemini 3 Pro (`gemini-3-pro-image-preview`) via Vercel Serverless Functions (`api/generate.ts`)
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Architecture
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+The project pairs a Vite + React Single Page Application with a Vercel Serverless Function (`api/generate.ts`). To protect API credentials, the browser never handles the Gemini API key directly. Instead, client-side images are compressed on HTML5 Canvas to keep multi-image payloads under serverless size thresholds, then forwarded to `/api/generate`. The serverless endpoint injects `process.env.GEMINI_API_KEY` and proxies the request to Google's Generative Language API with a 60-second execution budget (`maxDuration = 60`).
 
-Follow these steps:
+## Getting Started
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Prerequisites
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+Node.js 18+ and npm.
 
-# Step 3: Install the necessary dependencies.
-npm i
+### Installation
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+1. Clone the repository and install dependencies:
+   ```sh
+   git clone <REPO_URL>
+   cd aifashion
+   npm install
+   ```
 
-**Edit a file directly in GitHub**
+2. Configure environment variables:
+   Create a `.env` file in the root directory:
+   ```env
+   # Server-side only, never exposed to the browser
+   GEMINI_API_KEY=your_gemini_api_key_here
+   ```
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+3. Run the development server:
+   ```sh
+   # Runs Vite and Vercel serverless /api endpoint locally
+   npx vercel dev
+   ```
+   *Note: Running `npm run dev` serves the Vite client only; `npx vercel dev` is required for `/api/generate` to run locally.*
 
-**Use GitHub Codespaces**
+4. Production build:
+   ```sh
+   npm run build
+   ```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Deployment
 
-## What technologies are used for this project?
+Deploy directly to Vercel. Ensure `GEMINI_API_KEY` is configured in your **Vercel Project Settings > Environment Variables**.
 
-This project is built with:
+## What I Built
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/dc4da196-a024-4696-8bec-e6040ad848b6) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- **Domain-Specific Prompt Engineering**: Formulated prompt templates translating couture textile rules (hand-stitch feasibility, physical material constraints, facet sparkle physics, repeat mathematics) into deterministic prompts across 5 modes without visual artifacting or branding leakage.
+- **Secure Serverless Proxy**: Moved client-side API exposure to an isolated Vercel serverless function (`api/generate.ts`), securing API tokens from network inspection.
+- **Client-Side Payload Optimization**: Built a zero-dependency HTML5 Canvas compression pipeline that downscales uploaded reference photos to a maximum dimension of 1024px at 85% JPEG quality, allowing up to 10 reference images per prompt while preventing HTTP 413 payload errors.
+- **Progressive Streaming UX**: Replaced synchronous blocking batch requests with a progressive callback architecture where each motif renders into an interactive dialog card the instant Google returns it, paired with live loading skeletons and batch zip archiving.
