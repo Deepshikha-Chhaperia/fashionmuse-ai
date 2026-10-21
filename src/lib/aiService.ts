@@ -111,10 +111,11 @@ export async function generateDesigns(
   for (let i = 0; i < numImages; i++) {
     const requestBody = {
       contents: [{
+        role: 'user',
         parts: [
           ...compressedImages.map((img) => ({
-            inline_data: {
-              mime_type: 'image/jpeg',
+            inlineData: {
+              mimeType: 'image/jpeg',
               data: img.split(',')[1],
             },
           })),
@@ -136,13 +137,13 @@ export async function generateDesigns(
     });
 
     if (!res.ok) {
-      const errText = await res.text().catch(() => res.statusText);
-      throw new Error(`API error (${res.status}): ${errText}`);
+      throw new Error("Couldn't generate the design. Please try again.");
     }
 
     const data = await res.json();
-    const b64 = data.candidates?.[0]?.content?.parts?.find((part: any) => part.inlineData)?.inlineData?.data;
-    if (!b64) throw new Error(`Response did not contain image data for design ${i + 1}`);
+    const part = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData || p.inline_data);
+    const b64 = part?.inlineData?.data || part?.inline_data?.data;
+    if (!b64) throw new Error("Couldn't generate the design. Please try again.");
 
     const design: GeneratedDesign = {
       id: `design-${Date.now()}-${i}`,

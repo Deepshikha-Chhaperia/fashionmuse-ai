@@ -1,6 +1,6 @@
 # Atelier — AI Embroidery Design Generator
 
-> Production-ready AI embroidery design generator for hand-embroidery and couture motif design with Gemini.
+> Production-ready AI embroidery design generator for hand-embroidery and couture motif design with Gemini on Vertex AI.
 
 An editorial design studio for fashion designers and textile ateliers to conceptualize, iterate, and generate photorealistic, hand-stitchable embroidery motifs from references and raw materials.
 
@@ -29,11 +29,11 @@ An editorial design studio for fashion designers and textile ateliers to concept
 - **Styling & UI**: Tailwind CSS, shadcn/ui (Radix UI primitives), Lucide React
 - **Client Processing**: HTML5 Canvas (client-side image downscaling to 1024px @ 0.85 JPEG)
 - **Exporting**: JSZip
-- **AI & Backend**: Google Gemini 3 Pro (`gemini-3-pro-image-preview`) via Vercel Serverless Functions (`api/generate.ts`)
+- **AI & Backend**: Google Gen AI SDK (`@google/genai`) on Vertex AI Express Mode (`gemini-2.5-flash-image`) via Vercel Serverless Functions (`api/generate.ts`)
 
 ## Architecture
 
-The project pairs a Vite + React Single Page Application with a Vercel Serverless Function (`api/generate.ts`). To protect API credentials, the browser never handles the Gemini API key directly. Instead, client-side images are compressed on HTML5 Canvas to keep multi-image payloads under serverless size thresholds, then forwarded to `/api/generate`. The serverless endpoint injects `process.env.GEMINI_API_KEY` and proxies the request to Google's Generative Language API with a 60-second execution budget (`maxDuration = 60`).
+The project pairs a Vite + React Single Page Application with a Vercel Serverless Function (`api/generate.ts`). To protect API credentials, the browser never handles Vertex AI API keys directly. Client-side images are compressed on HTML5 Canvas to keep multi-image payloads under serverless size thresholds, then forwarded to `/api/generate`. The serverless function initializes `@google/genai` in Vertex AI express mode (`vertexai: true`) with `process.env.VERTEX_API_KEY`, routing requests to the model configured via `process.env.IMAGE_MODEL` (default: `gemini-2.5-flash-image`) with a 60-second execution budget (`maxDuration = 60`).
 
 ## Getting Started
 
@@ -54,7 +54,8 @@ Node.js 18+ and npm.
    Create a `.env` file in the root directory:
    ```env
    # Server-side only, never exposed to the browser
-   GEMINI_API_KEY=your_gemini_api_key_here
+   VERTEX_API_KEY=your_vertex_express_api_key_here
+   IMAGE_MODEL=gemini-2.5-flash-image
    ```
 
 3. Run the development server:
@@ -71,11 +72,11 @@ Node.js 18+ and npm.
 
 ### Deployment
 
-Deploy directly to Vercel. Ensure `GEMINI_API_KEY` is configured in your **Vercel Project Settings > Environment Variables**.
+Deploy directly to Vercel. Ensure `VERTEX_API_KEY` and optional `IMAGE_MODEL` are configured in your **Vercel Project Settings > Environment Variables**.
 
 ## What I Built
 
 - **Domain-Specific Prompt Engineering**: Formulated prompt templates translating couture textile rules (hand-stitch feasibility, physical material constraints, facet sparkle physics, repeat mathematics) into deterministic prompts across 5 modes without visual artifacting or branding leakage.
-- **Secure Serverless Proxy**: Moved client-side API exposure to an isolated Vercel serverless function (`api/generate.ts`), securing API tokens from network inspection.
+- **Secure Serverless Proxy with Vertex AI Express Mode**: Moved client-side API exposure to an isolated Vercel serverless function (`api/generate.ts`) authenticated through Vertex AI Express Mode using `@google/genai`, eliminating free-tier quota limits while protecting credentials.
 - **Client-Side Payload Optimization**: Built a zero-dependency HTML5 Canvas compression pipeline that downscales uploaded reference photos to a maximum dimension of 1024px at 85% JPEG quality, allowing up to 10 reference images per prompt while preventing HTTP 413 payload errors.
 - **Progressive Streaming UX**: Replaced synchronous blocking batch requests with a progressive callback architecture where each motif renders into an interactive dialog card the instant Google returns it, paired with live loading skeletons and batch zip archiving.

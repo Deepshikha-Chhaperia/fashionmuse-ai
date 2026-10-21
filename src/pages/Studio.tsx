@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import { Upload, X, Sparkles, Loader2, Download } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Upload, X, Sparkles, Loader2, Download, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { generateDesigns, type GeneratedDesign } from "@/lib/aiService";
 import type { GenerationMode } from "@/lib/prompts";
@@ -34,6 +34,247 @@ const COMPLEXITY_LEVELS: { value: 'simple' | 'moderate' | 'intricate' | 'ultra-c
   { value: 'ultra-complex', label: 'Ultra-Complex', desc: 'Maximum luxury, 6-8+ materials, museum impact.' },
 ];
 
+const DesignLightbox = ({
+  design,
+  onClose,
+}: {
+  design: GeneratedDesign | null;
+  onClose: () => void;
+}) => {
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const panRef = useRef(pan);
+  panRef.current = pan;
+  const touchRef = useRef<{
+    dist: number;
+    zoom: number;
+    startX: number;
+    startY: number;
+    panX: number;
+    panY: number;
+  } | null>(null);
+
+  useEffect(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, [design]);
+
+  const clampPan = (x: number, y: number, currentZoom: number) => {
+    if (currentZoom <= 1) return { x: 0, y: 0 };
+    const rect = containerRef.current?.getBoundingClientRect();
+    const w = rect?.width || 800;
+    const h = rect?.height || 600;
+    const maxX = (w * (currentZoom - 0.2)) / 2;
+    const maxY = (h * (currentZoom - 0.2)) / 2;
+    return {
+      x: Math.max(-maxX, Math.min(maxX, x)),
+      y: Math.max(-maxY, Math.min(maxY, y)),
+    };
+  };
+
+  const updateZoom = useCallback((updater: (prev: number) => number) => {
+    setZoom((prev) => {
+      const next = Math.min(5, Math.max(1, Math.round(updater(prev) * 10) / 10));
+      if (next === 1) setPan({ x: 0, y: 0 });
+      else setPan((p) => clampPan(p.x, p.y, next));
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const step = e.deltaY < 0 ? 0.3 : -0.3;
+      updateZoom((z) => z + step);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [updateZoom, design]);
+
+  const handleDoubleClick = () => {
+    if (zoom > 1) {
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+    } else {
+      updateZoom(() => 2.5);
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoomRef.current <= 1 || e.button !== 0) return;
+    e.preventDefault();
+    setIsDragging(true);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startPanX = panRef.current.x;
+    const startPanY = panRef.current.y;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      setPan(clampPan(startPanX + dx, startPanY + dy, zoomRef.current));
+    };
+
+    const onMouseUp = () => {
+      setIsDragging(false);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      touchRef.current = {
+        dist,
+        zoom: zoomRef.current,
+        startX: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        startY: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+        panX: panRef.current.x,
+        panY: panRef.current.y,
+      };
+    } else if (e.touches.length === 1 && zoomRef.current > 1) {
+      touchRef.current = {
+        dist: 0,
+        zoom: zoomRef.current,
+        startX: e.touches[0].clientX,
+        startY: e.touches[0].clientY,
+        panX: panRef.current.x,
+        panY: panRef.current.y,
+      };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchRef.current) return;
+    if (e.touches.length === 2 && touchRef.current.dist > 0) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      updateZoom(() => touchRef.current!.zoom * (dist / touchRef.current!.dist));
+    } else if (e.touches.length === 1 && zoomRef.current > 1 && touchRef.current.dist === 0) {
+      const dx = e.touches[0].clientX - touchRef.current.startX;
+      const dy = e.touches[0].clientY - touchRef.current.startY;
+      setPan(clampPan(touchRef.current.panX + dx, touchRef.current.panY + dy, zoomRef.current));
+    }
+  };
+
+  return (
+    <Dialog
+      open={!!design}
+      onOpenChange={(open) => {
+        if (!open) {
+          setZoom(1);
+          setPan({ x: 0, y: 0 });
+          onClose();
+        }
+      }}
+    >
+      <DialogContent className="flex flex-col gap-0 w-[95vw] max-w-5xl h-[90vh] max-h-[90vh] p-4 bg-background/95 backdrop-blur-md border border-border shadow-elevated rounded-md overflow-hidden">
+        <DialogTitle className="sr-only">{design?.title || "Design Lightbox"}</DialogTitle>
+
+        {/* Top Controls Bar */}
+        <div className="w-full shrink-0 flex items-center justify-between pb-3 pr-8 border-b border-border/50">
+          <div className="flex items-center gap-1.5 bg-card border border-border px-2.5 py-1 rounded-sm shadow-soft text-foreground">
+            <button
+              type="button"
+              onClick={() => updateZoom((z) => z - 0.5)}
+              disabled={zoom <= 1}
+              className="p-1 text-foreground hover:text-gold disabled:opacity-30 transition-colors"
+              title="Zoom out (-)"
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <span className="text-xs font-mono font-semibold text-foreground min-w-[3rem] text-center select-none">
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              type="button"
+              onClick={() => updateZoom((z) => z + 0.5)}
+              disabled={zoom >= 5}
+              className="p-1 text-foreground hover:text-gold disabled:opacity-30 transition-colors"
+              title="Zoom in (+)"
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setZoom(1);
+                setPan({ x: 0, y: 0 });
+              }}
+              disabled={zoom === 1}
+              className="px-2 py-0.5 text-xs font-medium text-foreground hover:text-gold disabled:opacity-30 transition-colors flex items-center gap-1 border-l border-border ml-1"
+              title="Reset zoom"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset</span>
+            </button>
+          </div>
+
+          {design && (
+            <button
+              onClick={() => downloadImage(design.image, `${design.title.replace(/\s+/g, "_")}.png`)}
+              className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-sm transition-colors"
+              title="Download design"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Viewport: Full image with original aspect ratio, never cropped */}
+        <div
+          ref={containerRef}
+          onDoubleClick={handleDoubleClick}
+          onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={() => { touchRef.current = null; }}
+          className={`relative flex-1 w-full min-h-0 my-2 overflow-hidden flex items-center justify-center select-none ${
+            zoom > 1 ? (isDragging ? "cursor-grabbing" : "cursor-grab") : "cursor-zoom-in"
+          }`}
+          style={{ touchAction: "none" }}
+        >
+          {design && (
+            <img
+              src={design.image}
+              alt={design.title}
+              draggable={false}
+              className="max-w-full max-h-full w-auto h-auto object-contain pointer-events-none select-none transition-transform duration-75"
+              style={{
+                transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`,
+                transformOrigin: "center center",
+              }}
+            />
+          )}
+        </div>
+
+        {/* Caption */}
+        {design && (
+          <div className="shrink-0 pt-2 border-t border-border/50 text-center w-full">
+            <p className="font-display text-sm sm:text-base text-foreground font-medium">{design.title}</p>
+            <p className="text-[11px] text-muted-foreground">{design.timestamp}</p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 const Studio = () => {
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [selectedMode, setSelectedMode] = useState<GenerationMode>("variations");
@@ -47,6 +288,7 @@ const Studio = () => {
   const [customInstructions, setCustomInstructions] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedDesigns, setGeneratedDesigns] = useState<GeneratedDesign[]>([]);
+  const [lightboxDesign, setLightboxDesign] = useState<GeneratedDesign | null>(null);
 
   const handleFiles = (files: File[]) => {
     const remaining = 10 - uploadedImages.length;
@@ -84,8 +326,8 @@ const Studio = () => {
         },
       });
       toast.success("Generation completed!");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to generate designs");
+    } catch {
+      toast.error("Couldn't generate the design. Please try again.");
     } finally {
       setIsGenerating(false);
     }
@@ -186,8 +428,8 @@ const Studio = () => {
                   <SelectContent position="popper" className="max-h-[280px]">
                     {GENERATION_MODES.map((m) => (
                       <SelectItem key={m.value} value={m.value} className="text-xs cursor-pointer py-2">
-                        <div className="font-medium">{m.label}</div>
-                        <div className="text-[10px] text-muted-foreground">{m.desc}</div>
+                        <div className="font-medium text-[#181512]">{m.label}</div>
+                        <div className="text-[10px] text-[#524D46]">{m.desc}</div>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -404,26 +646,22 @@ const Studio = () => {
                     key={design.id}
                     className="group relative bg-card border border-border overflow-hidden rounded-sm shadow-soft transition-all hover:border-gold/60"
                   >
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <div className="aspect-square cursor-pointer overflow-hidden bg-secondary/30">
-                          <img
-                            src={design.image}
-                            alt={design.title}
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                          />
-                        </div>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-[92vw] max-h-[92vh] p-4 flex flex-col items-center justify-center bg-background/95 backdrop-blur-md">
-                        <div className="flex-1 flex items-center justify-center max-h-[82vh] overflow-hidden">
-                          <img src={design.image} alt={design.title} className="max-w-full max-h-full object-contain" />
-                        </div>
-                        <div className="mt-3 text-center">
-                          <p className="font-display text-base text-foreground font-medium">{design.title}</p>
-                          <p className="text-xs text-muted-foreground">{design.timestamp}</p>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setLightboxDesign(design)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") setLightboxDesign(design);
+                      }}
+                      className="aspect-square cursor-pointer overflow-hidden bg-secondary/30"
+                      title="Inspect design"
+                    >
+                      <img
+                        src={design.image}
+                        alt={design.title}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                    </div>
 
                     <div className="p-3.5 flex items-center justify-between bg-card">
                       <div>
@@ -446,6 +684,7 @@ const Studio = () => {
         </div>
       </div>
 
+      <DesignLightbox design={lightboxDesign} onClose={() => setLightboxDesign(null)} />
       <Footer />
     </main>
   );
