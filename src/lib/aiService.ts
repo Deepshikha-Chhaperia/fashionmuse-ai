@@ -1,10 +1,19 @@
-import { PROMPTS, type GenerationMode } from './prompts';
+import {
+  PROMPTS,
+  DEFAULT_PRESENTATION,
+  HERO_RULE,
+  USE_CONFIG,
+  type GenerationMode,
+  type Use,
+} from './prompts';
 
 export interface GenerationOptions {
   mode: GenerationMode;
   images: string[];
   numImages?: 1 | 2 | 3 | 4 | 5;
-  application?: 'garment' | 'furnishing';
+  variationIndex?: number;
+  application?: Use;
+  showOnModelOrRoom?: boolean;
   targetBuyers?: string;
   complexityLevel?: 'simple' | 'moderate' | 'intricate' | 'ultra-complex';
   materialCount?: number;
@@ -41,11 +50,11 @@ const TARGET_BUYERS_MAP: Record<string, string> = {
   'middle-east': 'Middle East: rich gold tones, dense opulent coverage, bridal-ready.',
 };
 
-const MODE_LABELS: Record<GenerationMode, string> = {
+export const MODE_LABELS: Record<GenerationMode, string> = {
   variations: 'Variation',
   'new-ip': 'Original Concept',
   material: 'Material Design',
-  'statement-piece': 'Statement Piece',
+  'statement-piece': 'Hero Piece',
   pattern: 'Pattern',
 };
 
@@ -69,12 +78,13 @@ const compressImage = (dataUrl: string): Promise<string> =>
     img.src = dataUrl;
   });
 
-const buildPrompt = (mode: GenerationMode, opts: GenerationOptions) => {
-  const baseFabric = opts.application === 'furnishing'
+export const buildPrompt = (mode: GenerationMode, opts: GenerationOptions) => {
+  const use: Use = opts.application || 'garment';
+  const baseFabric = use === 'furnishing'
     ? 'heavy linen furnishing fabric, motif scaled for a cushion cover or curtain panel'
     : 'silk organza garment fabric';
 
-  let prompt = PROMPTS[mode].replace('{{BASE_FABRIC}}', baseFabric);
+  let prompt = PROMPTS[mode];
 
   if (mode === 'statement-piece') {
     prompt = prompt.replace('{{MATERIAL_COUNT}}', opts.materialCount ? String(opts.materialCount) : '6');
@@ -88,39 +98,82 @@ const buildPrompt = (mode: GenerationMode, opts: GenerationOptions) => {
     prompt = prompt.replace('{{PATTERN_BLOCK}}', patternBlock);
   }
 
+  const presentation = opts.showOnModelOrRoom
+    ? USE_CONFIG[use].presentation
+    : DEFAULT_PRESENTATION.replace('{{BASE_FABRIC}}', baseFabric);
+
   const buyerText = opts.targetBuyers ? (TARGET_BUYERS_MAP[opts.targetBuyers] || opts.targetBuyers) : TARGET_BUYERS_MAP.europe;
 
-  const notes = [
+  const hasClientDirection = Boolean(opts.customInstructions?.trim());
+
+  const variationFocus =
+    mode === 'variations' &&
+    typeof opts.variationIndex === 'number' &&
+    (opts.numImages || 1) >= 2
+      ? getVariationFocus(opts.variationIndex, opts.numImages || 1)
+      : '';
+
+  const parts = [
+    prompt,
+    variationFocus,
+    presentation,
+    opts.showOnModelOrRoom && !hasClientDirection ? HERO_RULE : '',
     mode === 'pattern' && opts.patternType && opts.patternType !== 'border-trim' ? PATTERN_MAP[opts.patternType] : '',
     COMPLEXITY_MAP[opts.complexityLevel || 'intricate'],
     `Target buyers: ${buyerText}`,
-    opts.customInstructions?.trim() ? `Client Specifications: ${opts.customInstructions.trim()}` : '',
+    hasClientDirection ? `Client direction: ${opts.customInstructions!.trim()}` : '',
+    hasClientDirection ? 'If the client direction says how to show the design, follow it over the presentation above.' : '',
+    hasClientDirection ? HERO_RULE : '',
   ].filter(Boolean);
 
-  return [prompt, ...notes].join('\n\n');
+  return parts.join('\n\n');
 };
+
+export const VARIATION_FOCUSES = [
+  "Variation focus: Layout — explore an entirely different shape and arrangement for the motif.",
+  "Variation focus: Elements — introduce different flower or motif element types and details.",
+  "Variation focus: Colour — use a fresh colour mix and tonal rebalancing while keeping the core materials.",
+  "Variation focus: Silhouette and scale — shift between clustered focal points and airy trailing lines.",
+  "Variation focus: Elements and relief — vary the dimensional structural elements and beadwork fills.",
+];
+
+export const getVariationFocus = (index: number, total: number): string => {
+  if (total < 2) return '';
+  return VARIATION_FOCUSES[index % VARIATION_FOCUSES.length];
+};
+
+export const VARIATIONS_REFERENCE_PREFIX =
+  "The following images are a craft and technique reference only. Create a new original motif made with the same craft and materials, with a different layout, different element types, and a new colour mix.";
+
+export const buildContentParts = (
+  mode: GenerationMode,
+  compressedImages: string[],
+  finalText: string
+) => [
+  ...(mode === 'variations' ? [{ text: VARIATIONS_REFERENCE_PREFIX }] : []),
+  ...compressedImages.map((img) => ({
+    inlineData: {
+      mimeType: 'image/jpeg',
+      data: img.includes(',') ? img.split(',')[1] : img,
+    },
+  })),
+  { text: finalText },
+];
 
 export async function generateDesigns(
   options: GenerationOptions
 ): Promise<{ designs: GeneratedDesign[] }> {
   const { mode, images, numImages = 2, onDesignGenerated } = options;
-  const prompt = buildPrompt(mode, options);
   const compressedImages = await Promise.all(images.slice(0, 10).map(compressImage));
   const designs: GeneratedDesign[] = [];
 
   for (let i = 0; i < numImages; i++) {
+    const prompt = buildPrompt(mode, { ...options, variationIndex: i });
+    const finalText = `${prompt}\n\nGenerate design ${i + 1} of ${numImages}. Respond with one image only.`;
     const requestBody = {
       contents: [{
         role: 'user',
-        parts: [
-          ...compressedImages.map((img) => ({
-            inlineData: {
-              mimeType: 'image/jpeg',
-              data: img.split(',')[1],
-            },
-          })),
-          { text: `${prompt}\n\nGenerate design ${i + 1} of ${numImages}. Respond with a photorealistic image only.` },
-        ],
+        parts: buildContentParts(mode, compressedImages, finalText),
       }],
       generationConfig: {
         temperature: 0.7,
@@ -141,7 +194,9 @@ export async function generateDesigns(
     }
 
     const data = await res.json();
-    const part = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData || p.inline_data);
+    const part = data.candidates?.[0]?.content?.parts?.find(
+      (p: { inlineData?: { data?: string }; inline_data?: { data?: string } }) => p.inlineData || p.inline_data
+    );
     const b64 = part?.inlineData?.data || part?.inline_data?.data;
     if (!b64) throw new Error("Couldn't generate the design. Please try again.");
 

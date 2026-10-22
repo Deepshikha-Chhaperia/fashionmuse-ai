@@ -47,10 +47,25 @@ const sendResponse = (res: any, status: number, data: any) => {
   }
 };
 
+export const resolveImageSize = (size?: unknown): '1K' | '2K' => {
+  return typeof size === 'string' && size.trim().toUpperCase() === '1K' ? '1K' : '2K';
+};
+
+export const buildImageConfig = (existing?: Record<string, any>, envSize?: unknown) => {
+  const defaultSize = resolveImageSize(envSize !== undefined ? envSize : process.env.IMAGE_SIZE);
+  const merged = {
+    aspectRatio: '1:1',
+    imageSize: defaultSize,
+    ...(existing || {}),
+  };
+  merged.imageSize = resolveImageSize(merged.imageSize);
+  return merged;
+};
+
 export default async function handler(req: any, res: any) {
   const start = Date.now();
-  const model = process.env.IMAGE_MODEL || 'gemini-2.5-flash-image';
-  const location = process.env.VERTEX_LOCATION || 'us-central1';
+  const model = process.env.IMAGE_MODEL || 'gemini-3.1-flash-image';
+  const location = process.env.VERTEX_LOCATION || 'global';
   const baseUrl = location === 'global'
     ? 'https://aiplatform.googleapis.com'
     : `https://${location}-aiplatform.googleapis.com`;
@@ -93,6 +108,7 @@ export default async function handler(req: any, res: any) {
     const config: Record<string, any> = { ...(body.generationConfig || body.config || {}) };
     if (systemInstruction) config.systemInstruction = systemInstruction;
     if (!config.responseModalities) config.responseModalities = ['IMAGE'];
+    config.imageConfig = buildImageConfig(config.imageConfig);
 
     const ai = new GoogleGenAI({
       vertexai: true,
@@ -101,6 +117,12 @@ export default async function handler(req: any, res: any) {
       httpOptions: { baseUrl },
     });
     const result = await ai.models.generateContent({ model, contents, config });
+
+    const responseJson = JSON.stringify(result);
+    if (Buffer.byteLength(responseJson, 'utf8') > 15 * 1024 * 1024) {
+      console.error('[SERVER ERROR] /api/generate response exceeds 15 MB limit');
+      return sendResponse(res, 413, { error: "Generated design exceeds 15 MB response limit. Please try 1K size." });
+    }
 
     const end = Date.now();
     logDebug({

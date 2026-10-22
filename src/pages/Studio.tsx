@@ -13,18 +13,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { Upload, X, Sparkles, Loader2, Download, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { generateDesigns, type GeneratedDesign } from "@/lib/aiService";
-import type { GenerationMode } from "@/lib/prompts";
+import { USE_CONFIG, type GenerationMode, type Use } from "@/lib/prompts";
 import { downloadImage } from "@/lib/utils";
 
 const GENERATION_MODES: { value: GenerationMode; label: string; desc: string }[] = [
-  { value: "variations", label: "Variations from Reference", desc: "Similar density and flow with new composition" },
-  { value: "new-ip", label: "New Original Design", desc: "Original abstract, architectural couture silhouette" },
-  { value: "material", label: "Design from Materials", desc: "Finished motif composed using uploaded raw materials" },
-  { value: "statement-piece", label: "Statement Piece", desc: "Hero centerpiece for gown bodice, jacket or bridal" },
-  { value: "pattern", label: "Repeat / Border Pattern", desc: "Seamless yardage repeat or continuous edge border" },
+  { value: "variations", label: "Variations", desc: "Same style as your reference, new design" },
+  { value: "new-ip", label: "New Original", desc: "A fresh design, no reference needed" },
+  { value: "material", label: "Design from Materials", desc: "Design built from your bead and crystal photos" },
+  { value: "statement-piece", label: "Hero Piece", desc: "One large centerpiece, e.g. neckline, bodice or jacket back" },
+  { value: "pattern", label: "Repeat / Border", desc: "A repeating pattern or an edge border" },
 ];
 
 const COMPLEXITY_LEVELS: { value: 'simple' | 'moderate' | 'intricate' | 'ultra-complex'; label: string; desc: string }[] = [
@@ -279,7 +280,8 @@ const Studio = () => {
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [selectedMode, setSelectedMode] = useState<GenerationMode>("variations");
   const [numGenerations, setNumGenerations] = useState<1 | 2 | 3 | 4 | 5>(2);
-  const [application, setApplication] = useState<'garment' | 'furnishing'>("garment");
+  const [application, setApplication] = useState<Use>("garment");
+  const [showOnModelOrRoom, setShowOnModelOrRoom] = useState(false);
   const [targetBuyers, setTargetBuyers] = useState<string>("europe");
   const [customTargetBuyers, setCustomTargetBuyers] = useState<string>("");
   const [complexityLevel, setComplexityLevel] = useState<'simple' | 'moderate' | 'intricate' | 'ultra-complex'>("intricate");
@@ -315,6 +317,7 @@ const Studio = () => {
         images: uploadedImages,
         numImages: numGenerations,
         application,
+        showOnModelOrRoom,
         targetBuyers: targetBuyers === 'custom' ? customTargetBuyers : targetBuyers,
         complexityLevel,
         materialCount: selectedMode === 'statement-piece' ? materialCount : undefined,
@@ -460,45 +463,60 @@ const Studio = () => {
             </div>
 
             {/* Target buyers & Use application */}
-            <div className="grid sm:grid-cols-2 gap-4 pt-2 border-t border-border">
-              <div>
-                <label className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-medium block mb-2">
-                  Target buyers
-                </label>
-                <Select value={targetBuyers} onValueChange={setTargetBuyers}>
-                  <SelectTrigger className="w-full h-10 border border-border bg-background text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent position="popper">
-                    <SelectItem value="europe" className="text-xs cursor-pointer">Europe</SelectItem>
-                    <SelectItem value="us" className="text-xs cursor-pointer">United States</SelectItem>
-                    <SelectItem value="middle-east" className="text-xs cursor-pointer">Middle East (Dubai)</SelectItem>
-                    <SelectItem value="custom" className="text-xs cursor-pointer">Custom</SelectItem>
-                  </SelectContent>
-                </Select>
-                {targetBuyers === "custom" && (
-                  <Input
-                    value={customTargetBuyers}
-                    onChange={(e) => setCustomTargetBuyers(e.target.value)}
-                    placeholder="Specify target buyer style..."
-                    className="h-9 mt-2 text-xs bg-background border-border"
-                  />
-                )}
+            <div className="pt-2 border-t border-border space-y-3">
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-medium block mb-2">
+                    Target buyers
+                  </label>
+                  <Select value={targetBuyers} onValueChange={setTargetBuyers}>
+                    <SelectTrigger className="w-full h-10 border border-border bg-background text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectItem value="europe" className="text-xs cursor-pointer">Europe</SelectItem>
+                      <SelectItem value="us" className="text-xs cursor-pointer">United States</SelectItem>
+                      <SelectItem value="middle-east" className="text-xs cursor-pointer">Middle East (Dubai)</SelectItem>
+                      <SelectItem value="custom" className="text-xs cursor-pointer">Custom</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {targetBuyers === "custom" && (
+                    <Input
+                      value={customTargetBuyers}
+                      onChange={(e) => setCustomTargetBuyers(e.target.value)}
+                      placeholder="Specify target buyer style..."
+                      className="h-9 mt-2 text-xs bg-background border-border"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-medium block mb-2">
+                    Use
+                  </label>
+                  <Select value={application} onValueChange={(v) => setApplication(v as Use)}>
+                    <SelectTrigger className="w-full h-10 border border-border bg-background text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectItem value="garment" className="text-xs cursor-pointer">Garment</SelectItem>
+                      <SelectItem value="furnishing" className="text-xs cursor-pointer">Home furnishing</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
-              <div>
-                <label className="text-[11px] tracking-[0.2em] uppercase text-muted-foreground font-medium block mb-2">
-                  Use
+              {/* Presentation Toggle */}
+              <div className="flex items-center gap-3">
+                <label htmlFor="context-toggle" className="text-xs font-medium text-foreground cursor-pointer select-none">
+                  {USE_CONFIG[application].label}
                 </label>
-                <Select value={application} onValueChange={(v) => setApplication(v as 'garment' | 'furnishing')}>
-                  <SelectTrigger className="w-full h-10 border border-border bg-background text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent position="popper">
-                    <SelectItem value="garment" className="text-xs cursor-pointer">Garment</SelectItem>
-                    <SelectItem value="furnishing" className="text-xs cursor-pointer">Home furnishing</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Switch
+                  id="context-toggle"
+                  checked={showOnModelOrRoom}
+                  onCheckedChange={setShowOnModelOrRoom}
+                  className="h-4 w-7 data-[state=checked]:bg-gold data-[state=unchecked]:bg-input transition-colors duration-150 focus-visible:ring-gold/50 [&>span]:h-3 [&>span]:w-3 data-[state=checked]:[&>span]:translate-x-3 data-[state=unchecked]:[&>span]:translate-x-0 [&>span]:transition-transform [&>span]:duration-150"
+                />
               </div>
             </div>
 
@@ -571,7 +589,7 @@ const Studio = () => {
               <Textarea
                 value={customInstructions}
                 onChange={(e) => setCustomInstructions(e.target.value)}
-                placeholder="Specific color harmony, motifs, scale, or artisan techniques..."
+                placeholder="e.g. red silk dress, on a neckline, on a cushion"
                 className="min-h-[80px] text-xs bg-background border-border resize-none"
               />
             </div>
